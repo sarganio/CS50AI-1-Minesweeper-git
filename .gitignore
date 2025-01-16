@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# assignment files
+requirements.txt
+runner.py
+assets/
+
 # C extensions
 *.so
 
