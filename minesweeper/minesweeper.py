@@ -187,7 +187,6 @@ class MinesweeperAI():
         # mark the cell as safe
         self.mark_safe(cell)
         
-        print(self.get_nearby_cells(self.width, ))
         raise NotImplementedError
 
     def make_safe_move(self):
@@ -220,7 +219,7 @@ class MinesweeperAI():
                 if (i, j) == cell:
                     continue
                 # skip cells outside board game
-                if i == self.height or j == self.width:
+                if i == self.height or j == self.width or i < 0 or j < 0:
                     continue
                 # add neighboring cell to nearby cell set
                 nearbyCells.add((i,j))
