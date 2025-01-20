@@ -182,6 +182,12 @@ class MinesweeperAI():
             5) add any new sentences to the AI's knowledge base
                if they can be inferred from existing knowledge
         """
+        # mark the cell as a move that has been made
+        self.moves_made.add(cell)
+        # mark the cell as safe
+        self.mark_safe(cell)
+        
+        
         raise NotImplementedError
 
     def make_safe_move(self):
@@ -203,3 +209,20 @@ class MinesweeperAI():
             2) are not known to be mines
         """
         raise NotImplementedError
+    
+    def get_nearby_cells(height, width, cell):
+        nearbyCells = set()
+        # Loop over all cells within one row and column
+        for i in range(cell[0] - 1, cell[0] + 2):
+            for j in range(cell[1] - 1, cell[1] + 2):
+
+                # Ignore the cell itself
+                if (i, j) == cell:
+                    continue
+                # skip cells outside board game
+                if i == height or j == width:
+                    continue
+                # add neighboring cell to nearby cell set
+                nearbyCells.add((i,j))
+                
+        return nearbyCells
