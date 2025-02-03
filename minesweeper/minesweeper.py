@@ -90,14 +90,13 @@ class Sentence():
     A sentence consists of a set of board cells,
     and a count of the number of those cells which are mines.
     """
-
+    safes = set()
+    mines = set()
 
     def __init__(self, cells, count):
         self.cells = set(cells)
         self.count = count
         # Keep track of cells known to be safe or mines
-        self.safes = set()
-        self.mines = set()
 
     def __eq__(self, other):
         return self.cells == other.cells and self.count == other.count
@@ -109,13 +108,15 @@ class Sentence():
         """
         Returns the set of all cells in self.cells known to be mines.
         """
-        raise self.mines
+        self.mark_if_deterministic()
+        return self.mines
 
     def known_safes(self):
         """
         Returns the set of all cells in self.cells known to be safe.
         """
-        return self.safe
+        self.mark_if_deterministic()
+        return self.safes
 
     def mark_mine(self, cell):
         """
@@ -124,20 +125,50 @@ class Sentence():
         """
         if cell in self.cells:
             self.cells.remove(cell)
-            self.count -=1
+            self.count -= 1
         self.mines.add(cell)
 
-
-    def reduce_sentences(self, other):
+    def reduce_sentence(self, other):
+        if self.is_empty() or other.is_empty() == set() or self is other:
+            return False  
+               
         if self.cells.issubset(other.cells):
-                other.cells.difference_update(self.cells)
-                other.count -=self.count
-                return True
+            # in order to change
+            tempSen = Sentence(other.cells.difference(self.cells), other.count - self.count)
+            other.cells = self.cells
+            other.count = self.count
+            self.cells = tempSen.cells
+            self.count = tempSen.count
+            self.mark_if_deterministic()
+            return True
 
         if other.cells.issubset(self.cells):
             self.cells.difference_update(other.cells)
             self.count -= other.count
+            self.mark_if_deterministic()
             return True
+        
+        largeSen = Sentence([], 0)
+        smallSen = Sentence([], 0)
+        if self.count > other.count:
+            largeSen.cells = self.cells
+            largeSen.count = self.count
+            smallSen.cells = other.cells
+            smallSen.count = other.count
+        else:
+            largeSen.cells = other.cells
+            largeSen.count = other.count
+            smallSen.cells = self.cells
+            smallSen.count = self.count
+
+        intersection = largeSen.cells.intersection(smallSen.cells)
+        cellsInLargeNotInBoth = largeSen.cells.difference(intersection)
+
+        if largeSen.count - len(cellsInLargeNotInBoth) == smallSen.count:
+            for cell in smallSen.cells.difference(intersection):
+                smallSen.mark_safe(cell)
+            return True
+         
         return False
 
     def mark_safe(self, cell):
@@ -149,18 +180,22 @@ class Sentence():
         if cell in self.cells:
             self.cells.remove(cell)
         
-
     def mark_if_deterministic(self):
         # if none are mines
         if self.count == 0:
             for cell in set(self.cells):
                 self.mark_safe(cell)
+            return True
             
-        # if all mine
+        # if all mines
         elif len(self.cells) == self.count:
             for cell in set(self.cells):
                 self.mark_mine(cell)
-
+            return True
+        return False
+    
+    def is_empty(self):
+        return self.cells == set() and self.count == 0
 
 
 class MinesweeperAI():
@@ -200,7 +235,7 @@ class MinesweeperAI():
         """
         self.safes.add(cell)
         for sentence in self.knowledge:
-            sentence.mark_safe(cell)
+            sentence.mark_safe(cell)       
 
     def add_knowledge(self, cell, count):
         """
@@ -222,39 +257,52 @@ class MinesweeperAI():
         # mark the cell as safe
         self.mark_safe(cell)
         # create a new sentence based on the value of `cell` and `count`
-        newKnoledge = Sentence(self.get_nearby_cells(cell), count)
-        # mark any additional cells as safe or as mines if it can be concluded based on the AI's knowledge base
-        for newCell in set(newKnoledge.cells):
+        newKnowledge = Sentence(self.get_nearby_cells(cell), count)
+        # add exist knoledge about safe cells and mines in new sentence(for new condition update)
+        self.update_marks_to(newKnowledge)
+        # if the new statement added new information updates the AI mines and safes knowledge
+        if newKnowledge.mark_if_deterministic():
+            self.update_knowledge_marks_from(newKnowledge)
+        # add the new sentence if not already exhausted its value
+        if not newKnowledge.is_empty():
+            self.knowledge.append(newKnowledge)
+        self.conclude_new_information()
+
+    def conclude_new_information(self):
+        beforeSafes = set(self.safes)
+        beforeMines = set(self.mines)
+        for i in range(len(self.knowledge)):
+            for j in range(i, len(self.knowledge)):
+                self.update_knowledge_marks_from(self.knowledge[i])
+                self.update_marks_to(self.knowledge[i])
+                if i == j:
+                    continue
+                self.knowledge[i].reduce_sentence(self.knowledge[j])
+                self.update_knowledge_marks_from(self.knowledge[i])      
+        for sen in list(self.knowledge):
+            if sen.is_empty():
+                self.knowledge.remove(sen)
+        if not (beforeSafes == self.safes and beforeMines == self.mines):
+            self.conclude_new_information()
+
+    def update_marks_to(self, newKnoledge):
+        for safeCell in self.safes:
+            newKnoledge.mark_safe(safeCell)
+        for mineCell in self.mines:
+            newKnoledge.mark_mine(mineCell)
+    """         for newCell in set(newKnoledge.cells):
             if newCell in self.safes:
                 newKnoledge.mark_safe(newCell)
             if newCell in self.mines:
-                newKnoledge.mark_mine(newCell)
-        # add any new sentences to the AI's knowledge base if they can be inferred from existing knowledge
-        newKnoledge.mark_if_deterministic()
-        for sentence in self.knowledge:
-            newKnoledge.reduce_sentences(sentence)
-            sentence.mark_if_deterministic()
-    
-        self.knowledge.append(newKnoledge)
-        for safeCell in self.safes:
-            for sentence in self.knowledge:
-                if safeCell in sentence.cells:
-                    sentence.mark_safe(safeCell)
-        # iterate over all safe cells in all sentences and add them to base knoledge
-        for sentence in self.knowledge:
-            for cellToMark in sentence.safes:
-                self.mark_safe(cellToMark)
-            for cellToMark in set(sentence.mines):
-                self.mark_mine(cellToMark)
-        # remove exosted sentences
-        for sentence in self.knowledge:
-            if sentence.count == 0:
-                self.knowledge.remove(sentence)
-        # for debug:
-        for sentence in self.knowledge:
-            print(sentence) 
-        print("safe moves to play:",list(self.safes.difference(self.moves_made)))
-        print("known mines: ", self.mines)
+                newKnoledge.mark_mine(newCell) """
+
+    def update_knowledge_marks_from(self, sentence):
+        for cellToMark in set(sentence.safes):
+            self.mark_safe(cellToMark)
+        for cellToMark in set(sentence.mines):
+            self.mark_mine(cellToMark)
+        for sen in self.knowledge:
+            sen.mark_if_deterministic()
         
     def make_safe_move(self):
         """
@@ -279,8 +327,8 @@ class MinesweeperAI():
         """
         for i in range(self.width):
             for j in range(self.height):
-                if (i,j) not in self.moves_made and (i,j) not in self.mines:
-                    return (i,j)
+                if (i, j) not in self.moves_made and (i, j) not in self.mines:
+                    return (i, j)
     
     def get_nearby_cells(self, cell):
         nearbyCells = set()
@@ -295,6 +343,6 @@ class MinesweeperAI():
                 if i == self.height or j == self.width or i < 0 or j < 0:
                     continue
                 # add neighboring cell to nearby cell set
-                nearbyCells.add((i,j))
+                nearbyCells.add((i, j))
                 
         return nearbyCells
